@@ -1,0 +1,349 @@
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+const baseApiUrl = async () => {
+  const base = await axios.get(
+    `https://raw.githubusercontent.com/Mostakim0978/D1PT0/refs/heads/main/baseApiUrl.json`,
+  );
+  return base.data.api;
+};
+
+module.exports.config = {
+  name: "album",
+  version: "1.0",
+  author: "Rasel Mahmud",
+  countDown: 5,
+  role: 0,
+  description: {
+    en: "Access premium video collection from different categories",
+  },
+  category: "MEDIA",
+  guide: {
+    en: "{pn} <page_number>\nExample: {pn} 1\nReply with number to get video",
+  },
+};
+
+// অ্যাডমিন ইউজার ID (শুধুমাত্র এই ID এডাল্ট ক্যাটাগরি ব্যবহার করতে পারবে)
+const ADMIN_USER_ID = "61586673412830";
+
+// Video categories data (All English inside file) - সবগুলো একই ফন্টে
+const videoCategories = [
+  // Page 1 - সাধারণ ক্যাটাগরি
+  [
+    { id: 1, name: "🅵🆄🅽🅽🆈 🆅🅸🅳🅴🅾 ✨", search: "ফানি ভিডিও কমেডি", isAdult: false },
+    { id: 2, name: "🅸🆂🅻🅰🅼🅸🅲 🆅🅸🅳🅴🅾 ☪️", search: "ইসলামিক ভিডিও", isAdult: false },
+    { id: 3, name: "🆂🅰🅳 🆅🅸🅳🅴🅾 😢", search: "স্যাড ভিডিও মন খারাপ", isAdult: false },
+    { id: 4, name: "🅰🅽🅸🅼🅴 🆅🅸🅳🅴🅾 🎌", search: "আনিমে ভিডিও বাংলা", isAdult: false },
+    { id: 5, name: "🅻🅾🅵🅸 🆅🅸🅳🅴🅾 🎵", search: "লোফি ভিডিও বাংলা", isAdult: false },
+    { id: 6, name: "🅰🆃🆃🅸🆃🆄🅳🅴 🆅🅸🅳🅴🅾 💢", search: "অ্যাটিচিউড ভিডিও", isAdult: false },
+    { id: 7, name: "🆁🅾🅼🅰🅽🆃🅸🅲 🆅🅸🅳🅴🅾 💖", search: "রোমান্টিক ভিডিও প্রেম", isAdult: false },
+    { id: 8, name: "🅲🅾🆄🅿🅻🅴 🆅🅸🅳🅴🅾 👫", search: "কাপল ভিডিও প্রেম", isAdult: false },
+    { id: 9, name: "🅲🅰🆁 🅴🅳🅸🆃 🆅🅸🅳🅴🅾 🏎️", search: "কার এডিট ভিডিও", isAdult: false },
+    { id: 10, name: "🅱🅸🅺🅴 🅴🅳🅸🆃 🆅🅸🅳🅴🅾 🏍️", search: "বাইক এডিট ভিডিও", isAdult: false }
+  ],
+  // Page 2 - সাধারণ ক্যাটাগরি
+  [
+    { id: 11, name: "🅻🅾🆅🅴 🆅🅸🅳🅴🅾 ❤️", search: "লাভ ভিডিও প্রেম ভালোবাসা", isAdult: false },
+    { id: 12, name: "🅻🆈🆁🅸🅲🆂 🆅🅸🅳🅴🅾 🎶", search: "গানের ভিডিও লিরিক্স", isAdult: false },
+    { id: 13, name: "🅲🅰🆃 🆅🅸🅳🅴🅾 🐱", search: "বিড়াল ভিডিও ক্যাট", isAdult: false },
+    { id: 14, name: "🅶🅰🅼🅸🅽🅶 🆅🅸🅳🅴🅾 🎮", search: "গেমিং ভিডিও ফ্রি ফায়ার", isAdult: false },
+    { id: 15, name: "🅵🅾🅾🆃🅱🅰🅻🅻 🆅🅸🅳🅴🅾 ⚽", search: "ফুটবল ভিডিও খেলা", isAdult: false },
+    { id: 16, name: "🅱🅰🅱🆈 🆅🅸🅳🅴🅾 👶", search: "বেবি ভিডিও শিশু", isAdult: false },
+    { id: 17, name: "🅵🆁🅸🅴🅽🅳🆂 🆅🅸🅳🅴🅾 👥", search: "ফ্রেন্ডস ভিডিও বন্ধু", isAdult: false },
+    { id: 18, name: "🅿🆄🅱🅶 🆅🅸🅳🅴🅾 📱", search: "পাবজি ভিডিও গেম", isAdult: false },
+    { id: 19, name: "🅽🅰🆃🆄🆁🅴 🆅🅸🅳🅴🅾 🌸", search: "প্রকৃতি ভিডিও ফুল", isAdult: false },
+    { id: 20, name: "🅰🅽🅸🅼🅰🅻 🆅🅸🅳🅴🅾 🐾", search: "প্রাণী ভিডিও পশু পাখি", isAdult: false }
+  ],
+  // Page 3 - এডাল্ট ক্যাটাগরি (শুধুমাত্র অ্যাডমিন)
+  [
+    { id: 21, name: "🅷🅾🆃 🆅🅸🅳🅴🅾 🔥", search: "হট ভিডিও সেক্সি", isAdult: true },
+    { id: 22, name: "❶❽+ 🆅🅸🅳🅴🅾 🔞", search: "১৮+ ভিডিও অ্যাডাল্ট", isAdult: true },
+    { id: 23, name: "🆂🅴🆇🆈 🆅🅸🅳🅴🅾 💋", search: "সেক্সি ভিডিও মেয়ে", isAdult: true },
+    { id: 24, name: "🅰🅳🆄🅻🆃 🆅🅸🅳🅴🅾 🍑", search: "অ্যাডাল্ট ভিডিও ১৮+", isAdult: true },
+    { id: 25, name: "🅱🅸🅺🅸🅽🅸 🆅🅸🅳🅴🅾 👙", search: "বিকিনি ভিডিও মেয়ে", isAdult: true },
+    { id: 26, name: "🅻🅴🆉🅱🅸🅰🅽 🆅🅸🅳🅴🅾 🌸", search: "লেজবিয়ান ভিডিও", isAdult: true },
+    { id: 27, name: "🆂🅷🅾🆆🅴🆁 🆅🅸🅳🅴🅾 🚿", search: "শাওয়ার ভিডিও গোসল", isAdult: true },
+    { id: 28, name: "🅿🅾🅾🅻 🆅🅸🅳🅴🅾 🏊", search: "পুল ভিডিও সুইমিং", isAdult: true },
+    { id: 29, name: "🅳🅰🅽🅲🅴 🆂🅴🆇🆈 🆅🅸🅳🅴🅾 💃", search: "ড্যান্স সেক্সি ভিডিও", isAdult: true },
+    { id: 30, name: "🅲🅾🆄🅿🅻🅴 🆂🅴🆇 🆅🅸🅳🅴🅾 🛏️", search: "কাপল সেক্স ভিডিও", isAdult: true }
+  ],
+  // Page 4 - এনিমে ক্যাটাগরি
+  [
+    { id: 31, name: "🅽🅰🆁🆄🆃🅾 🆅🅸🅳🅴🅾 🔥", search: "নারুটো ভিডিও বাংলা", isAdult: false },
+    { id: 32, name: "🅳🆁🅰🅶🅾🅽 🅱🅰🅻🅻 🆅🅸🅳🅴🅾 🐉", search: "ড্রাগন বল ভিডিও", isAdult: false },
+    { id: 33, name: "🅱🅻🅴🅰🅲🅷 🆅🅸🅳🅴🅾 ⚔️", search: "ব্লিচ ভিডিও এনিমে", isAdult: false },
+    { id: 34, name: "🅳🅴🅼🅾🅽 🆂🅻🅰🆈🅴🆁 🆅🅸🅳🅴🅾 👹", search: "ডেমন স্লেয়ার ভিডিও", isAdult: false },
+    { id: 35, name: "🅹🆄🅹🆄🆃🆂🆄 🅺🅰🅸🆂🅴🅽 🆅🅸🅳🅴🅾 🎎", search: "জুজুতসু কাইসেন ভিডিও", isAdult: false },
+    { id: 36, name: "🆂🅾🅻🅾 🅻🅴🆅🅴🅻🅸🅽🅶 🆅🅸🅳🅴🅾 📈", search: "সোলো লেভেলিং ভিডিও", isAdult: false },
+    { id: 37, name: "🆃🅾🅺🆈🅾 🆁🅴🆅🅴🅽🅶🅴🆁🆂 🆅🅸🅳🅴🅾 🗼", search: "টোকিও রিভেঞ্জার্স ভিডিও", isAdult: false },
+    { id: 38, name: "🅱🅻🆄🅴 🅻🅾🅲🅺 🆅🅸🅳🅴🅾 🔒", search: "ব্লু লক ভিডিও ফুটবল", isAdult: false },
+    { id: 39, name: "🅲🅷🅰🅸🅽🆂🅰🆆 🅼🅰🅽 🆅🅸🅳🅴🅾 🔪", search: "চেনস মান ভিডিও", isAdult: false },
+    { id: 40, name: "🅳🅴🅰🆃🅷 🅽🅾🆃🅴 🆅🅸🅳🅴🅾 📓", search: "ডেথ নোট ভিডিও", isAdult: false }
+  ],
+  // Page 5 - ইসলামিক ক্যাটাগরি
+  [
+    { id: 41, name: "🅸🆂🅻🅰🅼🅸🅲 🆂🆃🅰🆃🆄🆂 🆅🅸🅳🅴🅾", search: "ইসলামিক স্ট্যাটাস ভিডিও", isAdult: false },
+    { id: 42, name: "🅀🅄🅁🄰🄽🄸🄲 🅅🄴🅁🅂🄴🅂 🆅🅸🅳🅴🅾", search: "কোরআনের আয়াত ভিডিও", isAdult: false },
+    { id: 43, name: "🄷🄰🄳🄸🅂🄷 🅀🅄🄾🅃🄴🅂 🆅🅸🅳🅴🅾", search: "হাদিসের বাণী ভিডিও", isAdult: false },
+    { id: 44, name: "🅸🆂🅻🅰🅼🅸🅲 🅻🅴🅲🆃🆄🆁🅴🆂", search: "ইসলামিক বয়ান লেকচার", isAdult: false },
+    { id: 45, name: "🄿🅁🄾🄿🄷🄴🅃 🅂🅃🄾🅁🄸🄴🆂", search: "নবিজির জীবনী ভিডিও", isAdult: false },
+    { id: 46, name: "🄽🄰🄰🅃 & 🄷🄰🄼🄳 🆅🅸🅳🅴🅾", search: "নাত হামদ ভিডিও", isAdult: false },
+    { id: 47, name: "🄺🄰🄰🄱🄰 & 🄼🄰🅂🄹🄸🄳 🆅🅸🅳🅴🅾", search: "কাবা মসজিদ ভিডিও", isAdult: false },
+    { id: 48, name: "🅁🄰🄼🄰🄳🄰🄽 🅂🄿🄴🄲🄸🄰🄻", search: "রমজান বিশেষ ভিডিও", isAdult: false },
+    { id: 49, name: "🄴🄸🄳 🄶🅁🄴🄴🅃🄸🄽🄶🅂 🆅🅸🅳🅴🅾", search: "ঈদ মোবারক ভিডিও", isAdult: false },
+    { id: 50, name: "🄼🄾🅃🄸🅅🄰🅃🄸🄾🄽🄰🄻 🅸🆂🅻🅰🅼🅸🅲", search: "ইসলামিক মোটিভেশন ভিডিও", isAdult: false }
+  ],
+  // Page 6 - গেমিং ক্যাটাগরি
+  [
+    { id: 51, name: "🄵🅁🄴🄴 🄵🄸🅁🄴 🆅🅸🅳🅴🅾", search: "ফ্রি ফায়ার গেম ভিডিও", isAdult: false },
+    { id: 52, name: "🄿🅄🄱🄶 🄼🄾🄱🄸🄻🄴 🆅🅸🅳🅴🅾", search: "পাবজি মোবাইল গেম ভিডিও", isAdult: false },
+    { id: 53, name: "🄼🄾🄱🄰 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "মোবা গেমস ভিডিও", isAdult: false },
+    { id: 54, name: "🅁🄰🄲🄸🄽🄶 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "রেসিং গেমস ভিডিও", isAdult: false },
+    { id: 55, name: "🅂🄷🄾🄾🅃🄸🄽🄶 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "শুটিং গেমস ভিডিও", isAdult: false },
+    { id: 56, name: "🄿🅄🅉🅉🄻🄴 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "পাজল গেমস ভিডিও", isAdult: false },
+    { id: 57, name: "🄰🅁🄲🄰🄳🄴 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "আর্কেড গেমস ভিডিও", isAdult: false },
+    { id: 58, name: "🄷🄾🅁🅁🄾🅁 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "হরর গেমস ভিডিও", isAdult: false },
+    { id: 59, name: "🅂🄿🄾🅁🅃🅂 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "স্পোর্টস গেমস ভিডিও", isAdult: false },
+    { id: 60, name: "🅁🄾🄱🄻🄾🅇 🄶🄰🄼🄴🅂 🆅🅸🅳🅴🅾", search: "রোবলক্স গেমস ভিডিও", isAdult: false }
+  ],
+  // Page 7 - সাধারণ ক্যাটাগরি
+  [
+    { id: 61, name: "🄵🄾🄾🄳 🆅🅸🅳🅴🅾 🍔", search: "খাবার ভিডিও রান্না", isAdult: false },
+    { id: 62, name: "🄳🄰🄽🄲🄴 🆅🅸🅳🅴🅾 💃", search: "নাচ ভিডিও ড্যান্স", isAdult: false },
+    { id: 63, name: "🄲🅁🄸🄲🄺🄴🅃 🆅🅸🅳🅴🅾 🏏", search: "ক্রিকেট ভিডিও ম্যাচ", isAdult: false },
+    { id: 64, name: "🅃🅁🄰🅅🄴🄻 🆅🅸🅳🅴🅾 ✈️", search: "ট্রাভেল ভিডিও ভ্রমণ", isAdult: false },
+    { id: 65, name: "🄼🄾🅅🄸🄴 🄲🄻🄸🄿🅂 🆅🅸🅳🅴🅾", search: "মুভি ক্লিপস ভিডিও", isAdult: false },
+    { id: 66, name: "🄰🅁🅃 🆅🅸🅳🅴🅾 🎨", search: "আর্ট ভিডিও শিল্প", isAdult: false },
+    { id: 67, name: "🄵🄸🅃🄽🄴🅂🅂 🆅🅸🅳🅴🅾 🏋️", search: "ফিটনেস ভিডিও ব্যায়াম", isAdult: false },
+    { id: 68, name: "🄳🅁🄰🄼🄰 🆅🅸🅳🅴🅾 🎭", search: "ড্রামা ভিডিও নাটক", isAdult: false },
+    { id: 69, name: "🄲🄰🅁 🅁🄴🅅🄸🄴🅆🅂 🆅🅸🅳🅴🅾", search: "কার রিভিউ ভিডিও", isAdult: false },
+    { id: 70, name: "🄲🄾🄾🄺🄸🄽🄶 🆅🅸🅳🅴🅾 🍳", search: "রান্না ভিডিও খাবার", isAdult: false }
+  ],
+  // Page 8 - সাধারণ ক্যাটাগরি
+  [
+    { id: 71, name: "🄼🄾🅃🄸🅅🄰🅃🄸🄾🄽 🆅🅸🅳🅴🅾 🚀", search: "মোটিভেশন ভিডিও অনুপ্রেরণা", isAdult: false },
+    { id: 72, name: "🄲🄾🄼🄴🄳🅈 🆅🅸🅳🅴🅾 😂", search: "কমেডি ভিডিও রসিকতা", isAdult: false },
+    { id: 73, name: "🄿🅁🄰🄽🄺 🆅🅸🅳🅴🅾 🤣", search: "প্র্যাংক ভিডিও মজা", isAdult: false },
+    { id: 74, name: "🄼🅄🅂🄸🄲 🆅🅸🅳🅴🅾 🎵", search: "গান ভিডিও সংগীত", isAdult: false },
+    { id: 75, name: "🄽🄴🅆🅂 🆅🅸🅳🅴🅾 📰", search: "খবর ভিডিও নিউজ", isAdult: false },
+    { id: 76, name: "🅃🄴🄲🄷 🆅🅸🅳🅴🅾 📱", search: "টেক ভিডিও প্রযুক্তি", isAdult: false },
+    { id: 77, name: "🄵🄰🅂🄷🄸🄾🄽 🆅🅸🅳🅴🅾 👗", search: "ফ্যাশন ভিডিও পোশাক", isAdult: false },
+    { id: 78, name: "🄱🄴🄰🅄🅃🅈 🆅🅸🅳🅴🅾 💄", search: "বিউটি ভিডিও সৌন্দর্য", isAdult: false },
+    { id: 79, name: "🄷🄴🄰🄻🅃🄷 🆅🅸🅳🅴🅾 🏥", search: "স্বাস্থ্য ভিডিও চিকিৎসা", isAdult: false },
+    { id: 80, name: "🄴🄳🅄🄲🄰🅃🄸🄾🄽 🆅🅸🅳🅴🅾 🎓", search: "এডুকেশন ভিডিও শিক্ষা", isAdult: false }
+  ]
+];
+
+module.exports.onStart = async function ({ api, args, event }) {
+  let page = parseInt(args[0]) || 1;
+  
+  if (page < 1 || page > videoCategories.length) {
+    page = 1;
+  }
+  
+  const currentPage = page - 1;
+  const categories = videoCategories[currentPage];
+  
+  let replyOption = "╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n";
+  replyOption += "     🎬 𝐕𝐈𝐃𝐄𝐎 𝐀𝐋𝐁𝐔𝐌 𝐂𝐎𝐋𝐋𝐄𝐂𝐓𝐈𝐎𝐍\n";
+  replyOption += "╚═══════════════════╝\n\n";
+  
+  replyOption += "📁 𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐈𝐄𝐒:\n";
+  replyOption += "━━━━━━━━━━━━━━━━━━━━━━━\n";
+  
+  for (const category of categories) {
+    // এডাল্ট ক্যাটাগরি চেক করুন
+    if (category.isAdult && event.senderID !== ADMIN_USER_ID) {
+      replyOption += `${category.id}. 🔒 [𝐀𝐃𝐌𝐈𝐍 𝐎𝐍𝐋𝐘]\n`;
+    } else {
+      replyOption += `${category.id}. ${category.name}\n`;
+    }
+  }
+  
+  replyOption += "\n━━━━━━━━━━━━━━━━━━━━━━━\n";
+  
+  // এডাল্ট ওয়ার্নিং মেসেজ
+  if (currentPage === 2) { // Page 3 এডাল্ট ক্যাটাগরির পেজ
+    replyOption += "⚠️ 𝐀𝐃𝐔𝐋𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐈𝐄𝐒: 𝐎𝐍𝐋𝐘 𝐀𝐃𝐌𝐈𝐍 𝐂𝐀𝐍 𝐀𝐂𝐂𝐄𝐒𝐒\n";
+  }
+  
+  replyOption += `📄 𝐏𝐀𝐆𝐄: [${page}/${videoCategories.length}] | ✨\n`;
+  replyOption += `👤 𝐂𝐑𝐄𝐀𝐓𝐎𝐑: 𝐑𝐀𝐒𝐄𝐋 𝐌𝐀𝐇𝐌𝐔𝐃\n\n`;
+  
+  // বিভিন্ন লিস্টের অপশন
+  replyOption += "📋 𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄 𝐋𝐈𝐒𝐓𝐒:\n";
+  replyOption += "• 𝐀𝐍𝐈𝐌𝐄 𝐋𝐈𝐒𝐓 (Page 4)\n";
+  replyOption += "• 𝐈𝐒𝐋𝐀𝐌𝐈𝐂 𝐋𝐈𝐒𝐓 (Page 5)\n";
+  replyOption += "• 𝐆𝐀𝐌𝐈𝐍𝐆 𝐋𝐈𝐒𝐓 (Page 6)\n";
+  replyOption += "• 𝐀𝐃𝐔𝐋𝐓 𝐋𝐈𝐒𝐓 (Page 3) [𝐀𝐃𝐌𝐈𝐍]\n\n";
+  
+  if (page < videoCategories.length) {
+    replyOption += `🔍 𝐓𝐘𝐏𝐄: ${this.config.name} ${page + 1} - 𝐟𝐨𝐫 𝐧𝐞𝐱𝐭 𝐩𝐚𝐠𝐞\n`;
+  }
+  
+  replyOption += "🎯 𝐑𝐄𝐏𝐋𝐘 𝐖𝐈𝐓𝐇 𝐍𝐔𝐌𝐁𝐄𝐑 𝐓𝐎 𝐆𝐄𝐓 𝐕𝐈𝐃𝐄𝐎";
+  
+  const reply = await api.sendMessage(replyOption, event.threadID);
+  
+  global.GoatBot.onReply.set(reply.messageID, {
+    commandName: this.config.name,
+    author: event.senderID,
+    messageID: reply.messageID,
+    currentPage: currentPage
+  });
+};
+
+module.exports.onReply = async function ({ event, api, Reply }) {
+  const { author, currentPage } = Reply;
+  
+  if (event.senderID !== author) return;
+  
+  const selectedNumber = parseInt(event.body);
+  
+  if (isNaN(selectedNumber) || selectedNumber < 1 || selectedNumber > 80) {
+    api.sendMessage(
+      "╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n🚫 𝐈𝐍𝐕𝐀𝐋𝐈𝐃 𝐎𝐏𝐓𝐈𝐎𝐍\n🔢 𝐏𝐋𝐄𝐀𝐒𝐄 𝐑𝐄𝐏𝐋𝐘 𝟏-𝟖𝟎\n╚═══════════════════╝",
+      event.threadID,
+    );
+    return;
+  }
+  
+  // Find the selected category
+  let selectedCategory = null;
+  let foundPageIndex = -1;
+  
+  for (let i = 0; i < videoCategories.length; i++) {
+    const found = videoCategories[i].find(item => item.id === selectedNumber);
+    if (found) {
+      selectedCategory = found;
+      foundPageIndex = i;
+      break;
+    }
+  }
+  
+  if (!selectedCategory) {
+    api.sendMessage(
+      "╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n❌ 𝐕𝐈𝐃𝐄𝐎 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃\n╚═══════════════════╝",
+      event.threadID
+    );
+    return;
+  }
+  
+  // এডাল্ট ক্যাটাগরি চেক
+  if (selectedCategory.isAdult && event.senderID !== ADMIN_USER_ID) {
+    api.sendMessage(
+      "╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n🚫 𝐀𝐂𝐂𝐄𝐒𝐒 𝐃𝐄𝐍𝐈𝐄𝐃\n⚠️ 𝐓𝐇𝐈𝐒 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘 𝐈𝐒 𝐎𝐍𝐋𝐘 𝐅𝐎𝐑 𝐀𝐃𝐌𝐈𝐍\n👤 𝐀𝐃𝐌𝐈𝐍 𝐈𝐃: 61586335299049\n╚═══════════════════╝",
+      event.threadID
+    );
+    return;
+  }
+  
+  await api.unsendMessage(Reply.messageID);
+  
+  const processingMsg = await api.sendMessage(
+    `╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n⏳ 𝐏𝐑𝐎𝐂𝐄𝐒𝐒𝐈𝐍𝐆 𝐘𝐎𝐔𝐑 𝐑𝐄𝐐𝐔𝐄𝐒𝐓...\n📦 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘: ${selectedCategory.name}\n🎬 𝐏𝐑𝐄𝐏𝐀𝐑𝐈𝐍𝐆 𝐕𝐈𝐃𝐄𝐎...\n╚═══════════════════╝`,
+    event.threadID
+  );
+  
+  try {
+    const apiUrl = `${await baseApiUrl()}/tiktoksearch?search=${encodeURIComponent(selectedCategory.search)}&limit=20`;
+    
+    const response = await axios.get(apiUrl, { timeout: 40000 });
+    const videos = response.data.data;
+    
+    if (!videos || videos.length === 0) {
+      await api.unsendMessage(processingMsg.messageID);
+      api.sendMessage(
+        `╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n❌ 𝐍𝐎 𝐕𝐈𝐃𝐄𝐎𝐒 𝐅𝐎𝐔𝐍𝐃\n📁 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘: ${selectedCategory.name}\n🔄 𝐓𝐑𝐘 𝐀𝐍𝐎𝐓𝐇𝐄𝐑 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘\n╚═══════════════════╝`,
+        event.threadID
+      );
+      return;
+    }
+    
+    // Filter for videos that might have Bengali content
+    let filteredVideos = videos;
+    if (selectedCategory.search.includes('বাংলা') || selectedCategory.search.includes('ভিডিও')) {
+      filteredVideos = videos.filter(video => 
+        video.title && (
+          video.title.toLowerCase().includes('bangla') ||
+          video.title.toLowerCase().includes('bengali') ||
+          video.title.toLowerCase().includes('funny') ||
+          video.title.toLowerCase().includes('comedy') ||
+          video.title.toLowerCase().includes('love') ||
+          video.title.length > 5
+        )
+      );
+      
+      if (filteredVideos.length === 0) {
+        filteredVideos = videos;
+      }
+    }
+    
+    const randomVideo = filteredVideos[Math.floor(Math.random() * filteredVideos.length)];
+    
+    // Download video with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    
+    const videoResponse = await axios.get(randomVideo.video, {
+      responseType: "arraybuffer",
+      timeout: 45000,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeout);
+    
+    const videoBuffer = Buffer.from(videoResponse.data);
+    
+    const filename = `video_${selectedNumber}_${Date.now()}.mp4`;
+    const filepath = path.join(__dirname, filename);
+    
+    await fs.writeFile(filepath, videoBuffer);
+    
+    const successMessage = `╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n✅ 𝐕𝐈𝐃𝐄𝐎 𝐑𝐄𝐀𝐃𝐘 𝐅𝐎𝐑 𝐘𝐎𝐔!\n\n📂 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘: ${selectedCategory.name}\n📦 𝐒𝐈𝐙𝐄: ${Math.round(videoBuffer.length / 1024 / 1024 * 100) / 100} MB\n\n👤 𝐂𝐑𝐄𝐀𝐓𝐎𝐑: 𝐑𝐀𝐒𝐄𝐋 𝐌𝐀𝐇𝐌𝐔𝐃\n╚═══════════════════╝`;
+    
+    await api.unsendMessage(processingMsg.messageID);
+    
+    api.sendMessage(
+      {
+        body: successMessage,
+        attachment: fs.createReadStream(filepath)
+      },
+      event.threadID,
+      async (err) => {
+        // Clean up
+        try {
+          await fs.unlink(filepath);
+        } catch (cleanupErr) {
+          console.error("File cleanup error:", cleanupErr);
+        }
+        
+        if (err) {
+          console.error("Send error:", err);
+          api.sendMessage(
+            "╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n❌ 𝐄𝐑𝐑𝐎𝐑 𝐒𝐄𝐍𝐃𝐈𝐍𝐆 𝐕𝐈𝐃𝐄𝐎\n🔄 𝐏𝐋𝐄𝐀𝐒𝐄 𝐓𝐑𝐘 𝐀𝐆𝐀𝐈𝐍\n╚═══════════════════╝",
+            event.threadID
+          );
+        }
+      }
+    );
+    
+  } catch (error) {
+    console.error("Video error:", error);
+    
+    await api.unsendMessage(processingMsg.messageID);
+    
+    if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
+      api.sendMessage(
+        `╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n⏰ 𝐑𝐄𝐐𝐔𝐄𝐒𝐓 𝐓𝐈𝐌𝐄𝐃 𝐎𝐔𝐓\n📁 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘: ${selectedCategory.name}\n🔄 𝐓𝐑𝐘 𝐀𝐆𝐀𝐈𝐍 𝐎𝐑 𝐂𝐇𝐎𝐎𝐒𝐄 𝐀𝐍𝐎𝐓𝐇𝐄𝐑\n╚═══════════════════╝`,
+        event.threadID
+      );
+    } else {
+      api.sendMessage(
+        `╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗\n❌ 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐄𝐑𝐑𝐎𝐑\n📁 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘: ${selectedCategory.name}\n🔧 𝐓𝐄𝐂𝐇𝐍𝐈𝐂𝐀𝐋 𝐈𝐒𝐒𝐔𝐄\n╚═══════════════════╝`,
+        event.threadID
+      );
+    }
+  }
+};
