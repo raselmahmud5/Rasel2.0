@@ -52,7 +52,7 @@ module.exports = {
   },
 
   onStart: async function ({ message, args, usersData, event, getLang, api }) {
-    const permission = ["61575478043142"];
+    const permission = ["61567031991761"];
     if (!permission.includes(event.senderID)) {
       return api.sendMessage("You don't have enough permission to use this command. Only My Authors Have Access.", event.threadID, event.messageID);
     }
