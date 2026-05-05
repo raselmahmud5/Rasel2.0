@@ -1,82 +1,128 @@
-const axios = require('axios');
-const fs = require('fs-extra');
-const path = require('path');
-const stream = require('stream');
-const { promisify } = require('util');
+const axios = require("axios");
+const { createCanvas, loadImage } = require("canvas");
+const fs = require("fs");
+const path = require("path");
+const FormData = require("form-data");
 
-const pipeline = promisify(stream.pipeline);
-const API_ENDPOINT = "https://metakexbyneokex.fly.dev/animate";
-const CACHE_DIR = path.join(__dirname, 'cache');
+// === API utils ===
+async function getStreamFromURL(url) {
+  const res = await axios.get(url, { responseType: "stream" });
+  return res.data;
+}
 
+function generateRandomId(len = 16) {
+  const chars = "abcdef0123456789";
+  return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+async function getBalance() {
+  const pack = generateRandomId();
+  await axios.post("https://api.getglam.app/rewards/claim/hdnu30r7auc4kve", null, {
+    headers: {
+      "User-Agent": "Glam/1.58.4 Android/32 (Samsung SM-A156E)",
+      "glam-user-id": pack,
+      "user_id": pack,
+      "glam-local-date": new Date().toISOString(),
+    },
+  });
+  return pack;
+}
+
+async function uploadFile(pack, stream, prompt, duration = 5) {
+  const form = new FormData();
+  form.append("package_id", pack);
+  form.append("media_file", stream);
+  form.append("media_type", "image");
+  form.append("template_id", "community_img2vid");
+  form.append("template_category", "20_coins_dur");
+  form.append("frames", JSON.stringify([{
+    prompt,
+    custom_prompt: prompt,
+    start: 0,
+    end: 0,
+    timings_units: "frames",
+    media_type: "image",
+    style_id: "chained_falai_img2video",
+    rate_modifiers: { duration: duration.toString() + "s" },
+  }]));
+
+  const res = await axios.post("https://android.getglam.app/v2/magic_video", form, {
+    headers: { ...form.getHeaders(), "User-Agent": "Glam/1.58.4 Android/32 (Samsung SM-A156E)" },
+  });
+
+  return res.data.event_id;
+}
+
+async function getStatus(taskID, pack) {
+  while (true) {
+    const res = await axios.get("https://android.getglam.app/v2/magic_video", {
+      params: { package_id: pack, event_id: taskID },
+      headers: { "User-Agent": "Glam/1.58.4 Android/32 (Samsung SM-A156E)" },
+    });
+    if (res.data.status === "READY") return [res.data];
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+async function imgToVideo(prompt, filePath, duration = 5) {
+  const pack = await getBalance();
+  const task = await uploadFile(pack, fs.createReadStream(filePath), prompt, duration);
+  return await getStatus(task, pack);
+}
+
+// === Command ===
 module.exports = {
   config: {
     name: "animate",
-    aliases: ["anim", "video", "genvid"],
     version: "1.0",
-    author: "Neoaz ゐ",
-    countDown: 30,
+    author: "goku | SiFu ",
     role: 0,
-    longDescription: "Generate animated videos from text prompts using AI.",
-    category: "ai",
-    guide: {
-      en: 
-        "{pn} <prompt>\n\n" +
-        "Example: {pn} a cat is swimming"
-    }
+    description: "Animate a picture into a short video using a prompt",
+    category: "media",
+    guide: "Reply to a picture and type: animate <your prompt>"
   },
 
-  onStart: async function ({ args, message, event, api }) {
-    const prompt = args.join(" ").trim();
-
-    if (!prompt) {
-      return message.reply("Please provide a prompt to generate a video.");
+  onStart: async function ({ event, message, usersData, media }) {
+    if (!event.messageReply && !media) {
+      return message.reply("❌ You must reply to an image to animate it!");
     }
 
-    if (!fs.existsSync(CACHE_DIR)) {
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const promptText = event.body.replace(/^animate\s+/i, "").trim();
+    if (!promptText) {
+      return message.reply("❌ Please provide a prompt after the command.");
     }
 
-    api.setMessageReaction("⏳", event.messageID, () => {}, true);
-    let tempFilePath;
+    // Get the image stream
+    let filePath;
+    try {
+      if (media) {
+        filePath = media.filePath;
+      } else {
+        const url = event.messageReply.attachments[0].url;
+        filePath = path.join(__dirname, "cache", `animate_${Date.now()}.png`);
+        const writer = fs.createWriteStream(filePath);
+        const response = await axios.get(url, { responseType: "stream" });
+        response.data.pipe(writer);
+        await new Promise((resolve) => writer.on("finish", resolve));
+      }
+    } catch (err) {
+      console.error(err);
+      return message.reply("❌ Failed to download the image.");
+    }
+
+    const waitMsg = await message.reply("⏳ Generating animated video...");
 
     try {
-      const fullApiUrl = `${API_ENDPOINT}?prompt=${encodeURIComponent(prompt)}`;
-      
-      const apiResponse = await axios.get(fullApiUrl, { timeout: 120000 });
-      const data = apiResponse.data;
-
-      if (!data.success || !data.video_urls || data.video_urls.length === 0) {
-        throw new Error(data.message || "API returned no video.");
-      }
-
-      const videoUrl = data.video_urls[0];
-
-      const videoDownloadResponse = await axios.get(videoUrl, {
-        responseType: 'stream',
-        timeout: 120000,
-      });
-      
-      const fileHash = Date.now() + Math.random().toString(36).substring(2, 8);
-      tempFilePath = path.join(CACHE_DIR, `animate_${fileHash}.mp4`);
-      
-      await pipeline(videoDownloadResponse.data, fs.createWriteStream(tempFilePath));
-
-      api.setMessageReaction("✅", event.messageID, () => {}, true);
-      
+      const result = await imgToVideo(promptText, filePath, 5);
       await message.reply({
-        body: "Video generated 🐦",
-        attachment: fs.createReadStream(tempFilePath)
+        body: `🎬 Animation complete! Prompt: ${promptText}`,
+        attachment: await getStreamFromURL(result[0].video_url)
       });
 
-    } catch (error) {
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      console.error("Animate Command Error:", error);
-      message.reply("Failed to generate video.");
-
-    } finally {
-      if (tempFilePath && fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error("animate command error:", err);
+      message.reply("❌ Error while generating animation.");
     }
   }
 };
